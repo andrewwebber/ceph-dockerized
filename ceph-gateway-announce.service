@@ -1,0 +1,15 @@
+[Unit]
+Description=Announce Ceph Gateway
+After=ceph-gateway.service
+Requires=ceph-gateway.service
+BindsTo=ceph-gateway.service
+
+[Service]
+EnvironmentFile=/etc/network-environment
+ExecStart=/bin/sh -c "source /etc/profile.d/etcdctl.sh; dc=$(fleetctl list-machines -l | grep ${DEFAULT_IPV4} | awk -F',' '$2 ~ /dc=/ {print $2}; $3 ~ /dc=/ {print $3}' | cut -c 4); etcd_endpoint=$(etcdctl get brainloop/ceph/cluster-ip/$dc); while true; do etcdctl --no-sync set /machines/ceph/gateway/$dc/${DEFAULT_IPV4} ${DEFAULT_IPV4} --ttl 30;sleep 20;done"
+Restart=always
+RestartSec=20
+
+[X-Fleet]
+MachineMetadata=ceph-role=monitor
+Global=true

@@ -1,0 +1,40 @@
+[Unit]
+Description=Ceph OSD Disk Service
+After=network-online.target
+After=docker-volumes.service
+Before=proxy.service
+Requires=network-online.target
+Requires=docker.service
+Requires=network-environment.service
+After=docker.service
+After=network-environment.service
+
+[Service]
+TimeoutStartSec=0
+EnvironmentFile=/etc/network-environment
+ExecStartPre=-/usr/bin/sh -c "source /etc/profile.d/etcdctl.sh && /usr/bin/wget -nv -N -P /opt $(etcdctl --no-sync get /services/pkg)/ceph.container.tar.gz"
+ExecStartPre=-/usr/bin/sh -c "source /etc/profile.d/etcdctl.sh && /usr/bin/wget -N -P /opt $(etcdctl --no-sync get /services/pkg)/ceph.container.tar.gz.sig"
+ExecStartPre=/usr/bin/gpg --verify --trusted-key 1FA7BD0D14938422 /opt/ceph.container.tar.gz.sig
+ExecStartPre=/usr/bin/docker load -i /opt/ceph.container.tar.gz
+ExecStartPre=-/usr/bin/mkdir /home/core/ceph
+ExecStartPre=-/usr/bin/sh -c "source /etc/profile.d/etcdctl.sh && /usr/bin/wget -N -P /home/core/ceph $(etcdctl --no-sync get /services/pkg)/ceph-etcd-devices.sh"
+ExecStartPre=/usr/bin/sh -c 'chmod +x /home/core/ceph/ceph-etcd-devices.sh && /home/core/ceph/ceph-etcd-devices.sh'
+ExecStartPre=-/usr/bin/sh -c "source /etc/profile.d/etcdctl.sh && /usr/bin/wget -N -P /home/core/ceph $(etcdctl --no-sync get /services/pkg)/ceph-disk-prepare.sh"
+ExecStartPre=/usr/bin/sh -c 'chmod +x /home/core/ceph/ceph-disk-prepare.sh && /home/core/ceph/ceph-disk-prepare.sh'
+ExecStartPre=-/usr/bin/sh -c "source /etc/profile.d/etcdctl.sh && /usr/bin/wget -N -P /home/core/ceph $(etcdctl --no-sync get /services/pkg)/ceph-bind-mounts.sh"
+ExecStartPre=-/usr/bin/sh -c "source /etc/profile.d/etcdctl.sh && /usr/bin/wget -N -P /home/core/ceph $(etcdctl --no-sync get /services/pkg)/ceph-mount-osds.sh"
+ExecStartPre=/usr/bin/sh -c 'chmod +x /home/core/ceph/ceph-mount-osds.sh && /home/core/ceph/ceph-mount-osds.sh'
+ExecStartPre=/usr/bin/sh -c 'chmod +x /home/core/ceph/ceph-bind-mounts.sh'
+ExecStartPre=-/usr/bin/docker kill --signal=SIGTERM ceph-osd
+ExecStartPre=-/usr/bin/docker rm ceph-osd
+ExecStartPre=-/usr/bin/sh -c "source /etc/profile.d/etcdctl.sh && /usr/bin/wget -N -P /etc/ceph $(etcdctl --no-sync get /services/pkg)/ceph-osd-disk.sh"
+ExecStartPre=/usr/bin/sh -c 'chmod +x /etc/ceph/ceph-osd-disk.sh'
+ExecStart=/etc/ceph/ceph-osd-disk.sh
+ExecStop=/usr/bin/docker kill --signal=SIGTERM ceph-osd
+ExecStopPost=/usr/bin/bash -c "/usr/bin/systemctl stop docker-$(docker ps -a --no-trunc |grep ceph-osd |awk '{print $1}').scope"
+Restart=always
+RestartSec=20
+
+[X-Fleet]
+Global=true
+MachineMetadata=ceph-role=osd

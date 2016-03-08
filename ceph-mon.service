@@ -1,0 +1,29 @@
+[Unit]
+Description=Ceph Monitoring Daemon Service
+After=network-online.target
+After=docker-volumes.service
+Before=proxy.service
+Requires=network-online.target
+Requires=docker.service
+After=docker.service
+
+[Service]
+TimeoutStartSec=10m
+EnvironmentFile=/etc/network-environment
+ExecStartPre=-/usr/bin/sh -c "source /etc/profile.d/etcdctl.sh && /usr/bin/wget -nv -N -P /opt $(etcdctl --no-sync get /services/pkg)/ceph.container.tar.gz"
+ExecStartPre=-/usr/bin/sh -c "source /etc/profile.d/etcdctl.sh && /usr/bin/wget -N -P /opt $(etcdctl --no-sync get /services/pkg)/ceph.container.tar.gz.sig"
+ExecStartPre=/usr/bin/gpg --verify --trusted-key 1FA7BD0D14938422 /opt/ceph.container.tar.gz.sig
+ExecStartPre=/usr/bin/docker load -i /opt/ceph.container.tar.gz
+ExecStartPre=-/usr/bin/docker kill ceph-mon
+ExecStartPre=-/usr/bin/docker rm ceph-mon
+ExecStartPre=-/usr/bin/sh -c "source /etc/profile.d/etcdctl.sh && /usr/bin/wget -N -P /etc/ceph $(etcdctl --no-sync get /services/pkg)/ceph-mon.sh"
+ExecStartPre=/usr/bin/sh -c 'chmod +x /etc/ceph/ceph-mon.sh'
+ExecStart=/etc/ceph/ceph-mon.sh
+ExecStop=/usr/bin/docker kill --signal=SIGTERM ceph-mon
+ExecStopPost=/usr/bin/bash -c "/usr/bin/systemctl stop docker-$(docker ps -a --no-trunc |grep ceph-mon |awk '{print $1}').scope"
+Restart=always
+RestartSec=20
+
+[X-Fleet]
+Global=true
+MachineMetadata=ceph-role=monitor
